@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Virtual Try-On</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">✨</div>
+        <div class="logo-text">
+          <span class="logo-title">TryOn AI</span>
+          <span class="logo-sub">Virtual Fitting Room</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="openProfileBtn" class="icon-btn" title="My Profile">👤</button>
+        <button id="openHistoryBtn" class="icon-btn" title="Try-On History">🕐</button>
+      </div>
+    </header>
+
+    <!-- Views -->
+    <div class="views">
+
+      <!-- Main View -->
+      <div class="view active" id="mainView">
+        <!-- Profile Status Banner -->
+        <div class="profile-banner" id="profileBanner">
+          <div class="banner-no-profile" id="bannerNoProfile">
+            <span>👤 No profile set up yet</span>
+            <button class="btn-sm" id="setupProfileBtnBanner">Set Up Profile</button>
+          </div>
+          <div class="banner-has-profile hidden" id="bannerHasProfile">
+            <div class="profile-mini">
+              <img id="profileThumb" src="" alt="Profile" />
+              <span id="profileName">My Profile</span>
+            </div>
+            <span class="status-dot active"></span>
+          </div>
+        </div>
+
+        <!-- Scan Products Section -->
+        <div class="section">
+          <div class="section-header">
+            <h2>Products on Page</h2>
+            <button class="btn-icon" id="scanBtn" title="Scan Page">
+              <span id="scanIcon">🔍</span>
+              <span id="scanText">Scan</span>
+            </button>
+          </div>
+
+          <!-- Loading State -->
+          <div class="scanning-state hidden" id="scanningState">
+            <div class="scan-animation">
+              <div class="scan-line"></div>
+            </div>
+            <p>Scanning page for products...</p>
+          </div>
+
+          <!-- No Products State -->
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">🛍️</div>
+            <p>Click <strong>Scan</strong> to detect products on this page</p>
+          </div>
+
+          <!-- Products Grid -->
+          <div class="products-grid hidden" id="productsGrid"></div>
+        </div>
+
+        <!-- Selected Product Panel -->
+        <div class="selected-panel hidden" id="selectedPanel">
+          <div class="selected-header">
+            <span>Selected Product</span>
+            <button class="btn-clear" id="clearSelectionBtn">✕</button>
+          </div>
+          <div class="selected-product" id="selectedProduct"></div>
+          <div class="category-row">
+            <label>Category</label>
+            <select id="categorySelect" class="select">
+              <option value="auto">Auto-Detect</option>
+              <option value="tshirt">T-Shirt / Top</option>
+              <option value="shirt">Shirt</option>
+              <option value="dress">Dress</option>
+              <option value="jacket">Jacket / Coat</option>
+              <option value="pants">Pants / Trousers</option>
+              <option value="shoes">Shoes / Footwear</option>
+              <option value="jewellery">Jewellery / Necklace</option>
+              <option value="accessory">Accessories</option>
+            </select>
+          </div>
+          <button class="btn-primary" id="tryOnBtn">
+            <span class="btn-icon-left">✨</span>
+            Try On
+          </button>
+        </div>
+
+        <!-- Processing State -->
+        <div class="processing-panel hidden" id="processingPanel">
+          <div class="processing-content">
+            <div class="ai-loader">
+              <div class="ai-ring"></div>
+              <div class="ai-core">AI</div>
+            </div>
+            <h3>Generating Your Try-On</h3>
+            <p id="processingMessage">Analyzing product...</p>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <button class="btn-sm btn-ghost" id="cancelBtn">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Result Panel -->
+        <div class="result-panel hidden" id="resultPanel">
+          <div class="result-header">
+            <h3>✨ Your Try-On Result</h3>
+            <div class="result-actions">
+              <button class="btn-sm" id="downloadBtn" title="Download">⬇️ Save</button>
+              <button class="btn-sm btn-ghost" id="newTryOnBtn">New Try-On</button>
+            </div>
+          </div>
+          <div class="result-image-container">
+            <img id="resultImage" src="" alt="Try-On Result" />
+          </div>
+          <div class="result-product-info" id="resultProductInfo"></div>
+        </div>
+      </div>
+
+      <!-- Profile View -->
+      <div class="view" id="profileView">
+        <div class="view-header">
+          <button class="back-btn" id="backFromProfile">← Back</button>
+          <h2>My Digital Profile</h2>
+        </div>
+
+        <div class="profile-form">
+          <div class="profile-name-row">
+            <label>Profile Name</label>
+            <input type="text" id="profileNameInput" placeholder="e.g. My Profile" class="input" />
+          </div>
+
+          <div class="photo-sections">
+            <div class="photo-section-title">
+              <h3>Profile Photos</h3>
+              <p>Upload photos for best try-on results. Each photo type is used for specific product categories.</p>
+            </div>
+
+            <div class="photo-grid">
+              <div class="photo-card" data-type="fullbody">
+                <div class="photo-upload-area" id="upload-fullbody">
+                  <div class="photo-placeholder">
+                    <span class="photo-icon">🧍</span>
+                    <span class="photo-label">Full Body</span>
+                    <span class="photo-hint">Used for: Dresses, full outfits</span>
+                  </div>
+                  <img class="photo-preview hidden" id="preview-fullbody" alt="Full body" />
+                  <input type="file" accept="image/*" class="file-input" id="file-fullbody" />
+                </div>
+                <div class="photo-tips">Stand straight, arms slightly out, good lighting</div>
+              </div>
+
+              <div class="photo-card" data-type="upperbody">
+                <div class="photo-upload-area" id="upload-upperbody">
+                  <div class="photo-placeholder">
+                    <span class="photo-icon">👕</span>
+                    <span class="photo-label">Upper Body</span>
+                    <span class="photo-hint">Used for: T-shirts, shirts, jackets</span>
+                  </div>
+                  <img class="photo-preview hidden" id="preview-upperbody" alt="Upper body" />
+                  <input type="file" accept="image/*" class="file-input" id="file-upperbody" />
+                </div>
+                <div class="photo-tips">Waist-up, neutral pose, plain background</div>
+              </div>
+
+              <div class="photo-card" data-type="face">
+                <div class="photo-upload-area" id="upload-face">
+                  <div class="photo-placeholder">
+                    <span class="photo-icon">😊</span>
+                    <span class="photo-label">Face</span>
+                    <span class="photo-hint">Used for: Hats, eyewear, accessories</span>
+                  </div>
+                  <img class="photo-preview hidden" id="preview-face" alt="Face" />
+                  <input type="file" accept="image/*" class="file-input" id="file-face" />
+                </div>
+                <div class="photo-tips">Front-facing, even lighting, no sunglasses</div>
+              </div>
+
+              <div class="photo-card" data-type="feet">
+                <div class="photo-upload-area" id="upload-feet">
+                  <div class="photo-placeholder">
+                    <span class="photo-icon">👟</span>
+                    <span class="photo-label">Feet / Legs</span>
+                    <span class="photo-hint">Used for: Shoes, pants</span>
+                  </div>
+                  <img class="photo-preview hidden" id="preview-feet" alt="Feet" />
+                  <input type="file" accept="image/*" class="file-input" id="file-feet" />
+                </div>
+                <div class="photo-tips">Standing, both feet visible, good lighting</div>
+              </div>
+
+              <div class="photo-card" data-type="neck">
+                <div class="photo-upload-area" id="upload-neck">
+                  <div class="photo-placeholder">
+                    <span class="photo-icon">💎</span>
+                    <span class="photo-label">Neck / Décolletage</span>
+                    <span class="photo-hint">Used for: Jewellery, necklaces</span>
+                  </div>
+                  <img class="photo-preview hidden" id="preview-neck" alt="Neck" />
+                  <input type="file" accept="image/*" class="file-input" id="file-neck" />
+                </div>
+                <div class="photo-tips">Neck visible, bare or simple top, good lighting</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-actions">
+            <button class="btn-primary" id="saveProfileBtn">💾 Save Profile</button>
+            <button class="btn-danger" id="deleteProfileBtn">🗑️ Delete Profile</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- History View -->
+      <div class="view" id="historyView">
+        <div class="view-header">
+          <button class="back-btn" id="backFromHistory">← Back</button>
+          <h2>Try-On History</h2>
+        </div>
+        <div id="historyList" class="history-list">
+          <div class="empty-state">
+            <div class="empty-icon">🕐</div>
+            <p>No try-on history yet</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

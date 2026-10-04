@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TryOn AI – AI Virtual Try-On Chrome Extension</title>
+  <meta name="description" content="Try on clothes, shoes and accessories from any online shopping website using AI. Upload your photo, browse any shopping site, and see exactly how products will look on you." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================
+       CSS Variables & Reset
+       ============================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080810;
+      --bg2: #0d0d18;
+      --bg3: #12121e;
+      --card: rgba(255,255,255,0.04);
+      --card-border: rgba(255,255,255,0.08);
+      --accent: #7c3aed;
+      --accent2: #ec4899;
+      --accent-light: #a78bfa;
+      --gradient: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
+      --gradient-text: linear-gradient(135deg, #c084fc 0%, #f472b6 100%);
+      --glow: rgba(124, 58, 237, 0.4);
+      --text: #f5f4ff;
+      --text2: #9b98cc;
+      --text3: #6b6895;
+      --success: #10b981;
+      --r: 12px;
+      --r2: 20px;
+      --r3: 32px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ============================
+       Noise texture overlay
+       ============================ */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.5;
+    }
+
+    /* ============================
+       Navigation
+       ============================ */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 0 5%;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(8, 8, 16, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: all 0.3s ease;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo-icon {
+      width: 38px; height: 38px;
+      background: var(--gradient);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .nav-logo-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text2);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      padding: 9px 22px;
+      background: var(--gradient);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .nav-cta:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 28px var(--glow);
+    }
+
+    /* ============================
+       Hero Section
+       ============================ */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 100px 5% 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Radial gradient bg effect */
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -20%;
+      right: -10%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+      width: 100%;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-light);
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .hero-badge span { font-size: 14px; }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(40px, 5vw, 72px);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      letter-spacing: -2px;
+    }
+
+    .text-gradient {
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-desc {
+      font-size: 18px;
+      color: var(--text2);
+      line-height: 1.7;
+      margin-bottom: 40px;
+      max-width: 480px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary-lg {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      background: var(--gradient);
+      border: none;
+      border-radius: var(--r);
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 30px var(--glow);
+    }
+
+    .btn-primary-lg:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 40px rgba(124,58,237,0.6);
+    }
+
+    .btn-secondary-lg {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: var(--r);
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+    }
+
+    .btn-secondary-lg:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.25);
+      transform: translateY(-2px);
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 32px;
+      margin-top: 48px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-number {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text3);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hero-image-container {
+      position: relative;
+    }
+
+    .hero-img {
+      width: 100%;
+      border-radius: var(--r2);
+      box-shadow: 0 20px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.07);
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-glow {
+      position: absolute;
+      inset: -20px;
+      background: radial-gradient(circle at 50% 50%, rgba(124,58,237,0.3), transparent 70%);
+      filter: blur(40px);
+      z-index: 1;
+    }
+
+    /* Floating cards on hero */
+    .floating-card {
+      position: absolute;
+      background: rgba(13, 13, 24, 0.9);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--r);
+      padding: 12px 16px;
+      z-index: 3;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: float 4s ease-in-out infinite;
+    }
+
+    .float-card-1 {
+      top: 10%;
+      left: -10%;
+      animation-delay: 0s;
+    }
+
+    .float-card-2 {
+      bottom: 15%;
+      right: -8%;
+      animation-delay: 2s;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    .float-card-label {
+      font-size: 11px;
+      color: var(--text3);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .float-card-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .float-card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      background: rgba(16, 185, 129, 0.15);
+      border-radius: 100px;
+      font-size: 11px;
+      color: var(--success);
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ============================
+       How It Works
+       ============================ */
+    section { padding: 100px 5%; }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 14px;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.2);
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-light);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(32px, 4vw, 52px);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+    }
+
+    .section-desc {
+      font-size: 17px;
+      color: var(--text2);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 60px;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .step-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r2);
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+
+    .step-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: var(--gradient);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .step-card:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(124,58,237,0.3);
+      transform: translateY(-4px);
+    }
+
+    .step-card:hover::before { opacity: 1; }
+
+    .step-number {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 60px;
+      font-weight: 900;
+      background: var(--gradient-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0.3;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+
+    .step-icon {
+      font-size: 36px;
+      margin-bottom: 16px;
+      display: block;
+    }
+
+    .step-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .step-desc {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    /* ============================
+       Features Section
+       ============================ */
+    .features-section {
+      background: var(--bg2);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r2);
+      padding: 28px;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(124,58,237,0.3);
+      transform: translateY(-4px);
+    }
+
+    .feature-icon-box {
+      width: 52px; height: 52px;
+      border-radius: var(--r);
+      background: var(--gradient);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px var(--glow);
+    }
+
+    .feature-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    /* ============================
+       Categories Section
+       ============================ */
+    .categories-section { background: var(--bg); }
+
+    .categories-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .category-chip {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r2);
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .category-chip:hover, .category-chip.active {
+      background: rgba(124,58,237,0.1);
+      border-color: rgba(124,58,237,0.4);
+      transform: translateY(-4px);
+    }
+
+    .category-chip:hover, .category-chip.active .cat-label {
+      color: var(--accent-light);
+    }
+
+    .cat-emoji { font-size: 36px; display: block; margin-bottom: 10px; }
+
+    .cat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text2);
+      transition: color 0.2s ease;
+    }
+
+    .category-chip:hover .cat-label { color: var(--accent-light); }
+
+    /* ============================
+       Architecture Section
+       ============================ */
+    .arch-section { background: var(--bg3); }
+
+    .arch-diagram {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r3);
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .arch-diagram::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at 50% 0%, rgba(124,58,237,0.08), transparent 70%);
+      pointer-events: none;
+    }
+
+    .arch-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .arch-node {
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r);
+      padding: 16px 20px;
+      text-align: center;
+      min-width: 120px;
+      transition: all 0.2s ease;
+    }
+
+    .arch-node:hover {
+      border-color: rgba(124,58,237,0.4);
+      transform: translateY(-2px);
+    }
+
+    .arch-node-icon { font-size: 28px; display: block; margin-bottom: 6px; }
+    .arch-node-label { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .arch-arrow { font-size: 20px; color: var(--accent-light); }
+
+    /* ============================
+       CTA Section
+       ============================ */
+    .cta-section {
+      background: var(--bg2);
+      text-align: center;
+    }
+
+    .cta-card {
+      max-width: 700px;
+      margin: 0 auto;
+      background: var(--gradient);
+      border-radius: var(--r3);
+      padding: 60px 40px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 80px rgba(124,58,237,0.4);
+    }
+
+    .cta-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .cta-card h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 42px;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-card p {
+      font-size: 18px;
+      color: rgba(255,255,255,0.8);
+      margin-bottom: 36px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-actions {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-white {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      background: white;
+      border: none;
+      border-radius: var(--r);
+      color: #7c3aed;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+
+    .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+
+    .btn-outline-white {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      background: transparent;
+      border: 2px solid rgba(255,255,255,0.5);
+      border-radius: var(--r);
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-outline-white:hover { background: rgba(255,255,255,0.1); border-color: white; transform: translateY(-2px); }
+
+    /* ============================
+       Footer
+       ============================ */
+    footer {
+      background: var(--bg);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 60px 5% 40px;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 60px;
+      margin-bottom: 40px;
+    }
+
+    .footer-brand p {
+      font-size: 14px;
+      color: var(--text3);
+      line-height: 1.7;
+      margin-top: 14px;
+      max-width: 280px;
+    }
+
+    .footer-col h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    .footer-col ul { list-style: none; }
+
+    .footer-col ul li {
+      margin-bottom: 10px;
+    }
+
+    .footer-col ul li a {
+      font-size: 14px;
+      color: var(--text3);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    .footer-col ul li a:hover { color: var(--accent-light); }
+
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text3);
+    }
+
+    /* ============================
+       Tech stack badges
+       ============================ */
+    .tech-badges {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 40px;
+    }
+
+    .tech-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+    }
+
+    /* ============================
+       Responsive
+       ============================ */
+    @media (max-width: 900px) {
+      .hero-content { grid-template-columns: 1fr; gap: 40px; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .categories-grid { grid-template-columns: repeat(3, 1fr); }
+      .footer-content { grid-template-columns: 1fr 1fr; }
+      .nav-links { display: none; }
+      .float-card-1, .float-card-2 { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 20px; }
+      section { padding: 60px 20px; }
+      .hero { padding: 90px 20px 60px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .categories-grid { grid-template-columns: repeat(2, 1fr); }
+      .footer-content { grid-template-columns: 1fr; gap: 30px; }
+      .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+    }
+
+    /* ============================
+       Animations
+       ============================ */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Gradient border card */
+    .gradient-border {
+      position: relative;
+      background: var(--bg3);
+      border-radius: var(--r2);
+    }
+
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      background: var(--gradient);
+      border-radius: calc(var(--r2) + 1px);
+      z-index: -1;
+      opacity: 0.5;
+    }
+
+    /* Install steps */
+    .install-steps {
+      max-width: 700px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .install-step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 20px 24px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--r);
+      transition: all 0.2s ease;
+    }
+
+    .install-step:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(124,58,237,0.3);
+    }
+
+    .install-step-num {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--gradient);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      font-weight: 800;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: 0 0 15px var(--glow);
+    }
+
+    .install-step-content h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .install-step-content p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: 'Courier New', monospace;
+      background: rgba(124,58,237,0.15);
+      color: var(--accent-light);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav id="navbar">
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon">✨</div>
+      <span class="nav-logo-text">TryOn AI</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#categories">Categories</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#install">Install</a></li>
+    </ul>
+    <a href="#install" class="nav-cta">Get Extension ↗</a>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero" id="hero">
+    <div class="hero-content">
+      <div class="hero-text fade-in">
+        <div class="hero-badge">
+          <span>✨</span> Powered by Google Gemini AI
+        </div>
+        <h1>
+          Try On Anything.<br>
+          <span class="text-gradient">From Any Store.</span>
+        </h1>
+        <p class="hero-desc">
+          Create your digital profile once. Browse any online shopping website and instantly visualize how clothes, shoes, and accessories look on <em>you</em> — powered by Gemini AI.
+        </p>
+        <div class="hero-actions">
+          <a href="#install" class="btn-primary-lg">
+            🧩 Install Chrome Extension
+          </a>
+          <a href="#how-it-works" class="btn-secondary-lg">
+            See How It Works →
+          </a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-item">
+            <span class="stat-number">9+</span>
+            <span class="stat-label">Product Categories</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">∞</span>
+            <span class="stat-label">Shopping Websites</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">AI</span>
+            <span class="stat-label">Powered Try-On</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-image-container fade-in" style="animation-delay: 0.2s">
+        <div class="hero-glow"></div>
+        <img src="hero.jpg" alt="AI Virtual Try-On Interface" class="hero-img" />
+
+        <div class="floating-card float-card-1">
+          <div class="float-card-label">👕 Product Detected</div>
+          <div class="float-card-value">Urban Floral T-Shirt</div>
+          <div class="float-card-badge">✓ Ready to Try On</div>
+        </div>
+
+        <div class="floating-card float-card-2">
+          <div class="float-card-label">✨ Try-On Generated</div>
+          <div class="float-card-value">Looking great on you!</div>
+          <div class="float-card-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;">AI Powered</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works">
+    <div class="section-label">🔄 Simple Workflow</div>
+    <h2 class="section-title">From Browse to <span class="text-gradient">Try-On</span><br>in Seconds</h2>
+    <p class="section-desc">No more guessing. Set up once, try everything virtually across any shopping website.</p>
+
+    <div class="steps-grid">
+      <div class="step-card fade-in">
+        <div class="step-number">01</div>
+        <span class="step-icon">👤</span>
+        <h3 class="step-title">Create Your Digital Profile</h3>
+        <p class="step-desc">Upload your photos (full body, upper body, face, feet, neck) once. The extension stores them securely for all future try-ons. Each photo type is used for different product categories.</p>
+      </div>
+
+      <div class="step-card fade-in" style="animation-delay:0.1s">
+        <div class="step-number">02</div>
+        <span class="step-icon">🛍️</span>
+        <h3 class="step-title">Browse Any Shopping Website</h3>
+        <p class="step-desc">Visit Amazon, Flipkart, Myntra, AJIO, Zara, or any other online store. The extension automatically detects products on the page using intelligent product detection algorithms.</p>
+      </div>
+
+      <div class="step-card fade-in" style="animation-delay:0.2s">
+        <div class="step-number">03</div>
+        <span class="step-icon">🧩</span>
+        <h3 class="step-title">Open Extension & Scan</h3>
+        <p class="step-desc">Click the TryOn AI extension icon in your browser toolbar. Hit Scan to instantly detect all products on the current page — it works across product pages and listing pages.</p>
+      </div>
+
+      <div class="step-card fade-in">
+        <div class="step-number">04</div>
+        <span class="step-icon">👆</span>
+        <h3 class="step-title">Select a Product</h3>
+        <p class="step-desc">Pick any product from the detected list. The extension pulls the product image, title, price, and category automatically. You can also manually select the category for best results.</p>
+      </div>
+
+      <div class="step-card fade-in" style="animation-delay:0.1s">
+        <div class="step-number">05</div>
+        <span class="step-icon">✨</span>
+        <h3 class="step-title">Click Try On</h3>
+        <p class="step-desc">Hit the glowing "Try On" button. Your profile photos and the product image are sent to the Gemini AI backend. The AI generates a photorealistic visualization of you wearing the product.</p>
+      </div>
+
+      <div class="step-card fade-in" style="animation-delay:0.2s">
+        <div class="step-number">06</div>
+        <span class="step-icon">🎉</span>
+        <h3 class="step-title">View & Save Your Result</h3>
+        <p class="step-desc">See a realistic AI-generated image of you wearing the product! Save it, share it, or try another product. All results are stored in your try-on history for easy comparison.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="features-section">
+    <div class="section-label">⚡ Core Features</div>
+    <h2 class="section-title">Everything You Need for<br><span class="text-gradient">Virtual Shopping</span></h2>
+    <p class="section-desc">Built with cutting-edge AI and thoughtful UX design for the ultimate shopping experience.</p>
+
+    <div class="features-grid">
+      <div class="feature-card fade-in">
+        <div class="feature-icon-box">🌐</div>
+        <h3 class="feature-title">Works on Any Website</h3>
+        <p class="feature-desc">Intelligent multi-selector product detection using JSON-LD structured data, OpenGraph meta tags, and site-specific DOM selectors. Tested on Amazon, Flipkart, Myntra, AJIO, and more.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.1s">
+        <div class="feature-icon-box">🤖</div>
+        <h3 class="feature-title">Gemini AI Generation</h3>
+        <p class="feature-desc">Powered by Google Gemini 2.0 Flash multimodal AI for photorealistic virtual try-on. Category-aware prompting ensures the right body part is shown with realistic draping and lighting.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.2s">
+        <div class="feature-icon-box">👤</div>
+        <h3 class="feature-title">Personal Digital Profile</h3>
+        <p class="feature-desc">Upload 5 types of photos (full body, upper body, face, feet, neck) for different product categories. Set up once, reuse for all future try-ons with no repeated uploads.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon-box">🎨</div>
+        <h3 class="feature-title">Context-Aware Results</h3>
+        <p class="feature-desc">AI-generated backgrounds match the product style — a beach t-shirt appears in a beach setting, an evening dress in an elegant environment. Not just overlay, truly immersive visualization.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.1s">
+        <div class="feature-icon-box">📱</div>
+        <h3 class="feature-title">Try-On History</h3>
+        <p class="feature-desc">Every try-on is saved locally. Review, compare, and revisit previous results. Build your personal virtual wardrobe to help make better purchase decisions over time.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.2s">
+        <div class="feature-icon-box">🔒</div>
+        <h3 class="feature-title">Privacy First</h3>
+        <p class="feature-desc">Your profile photos are stored locally in Chrome's secure storage. They're only sent to our backend during try-on requests over HTTPS. No public exposure, no training usage without consent.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon-box">⚡</div>
+        <h3 class="feature-title">Real-Time Progress</h3>
+        <p class="feature-desc">Live progress bar and status messages keep you informed during AI generation. Cancel anytime. Failed requests are handled gracefully with clear error messages.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.1s">
+        <div class="feature-icon-box">🏷️</div>
+        <h3 class="feature-title">Smart Category Detection</h3>
+        <p class="feature-desc">Automatically detects product category from title, description, and page structure. Manually override with the category selector for precise AI prompting and optimal results.</p>
+      </div>
+
+      <div class="feature-card fade-in" style="animation-delay:0.2s">
+        <div class="feature-icon-box">☁️</div>
+        <h3 class="feature-title">Vercel Backend</h3>
+        <p class="feature-desc">Serverless Node.js backend deployed on Vercel for global edge performance. API keys are securely stored as environment variables — never exposed in the extension code.</p>
+      </div>
+    </div>
+
+    <div class="tech-badges fade-in" style="max-width:1200px; margin:40px auto 0;">
+      <div class="tech-badge">🧩 Chrome Extension MV3</div>
+      <div class="tech-badge">🤖 Google Gemini 2.0 Flash</div>
+      <div class="tech-badge">☁️ Vercel Serverless</div>
+      <div class="tech-badge">💾 Chrome Storage API</div>
+      <div class="tech-badge">🔍 DOM Product Detection</div>
+      <div class="tech-badge">📊 JSON-LD Structured Data</div>
+    </div>
+  </section>
+
+  <!-- Categories -->
+  <section id="categories" class="categories-section">
+    <div class="section-label">👗 Supported Categories</div>
+    <h2 class="section-title">Try On <span class="text-gradient">Anything</span></h2>
+    <p class="section-desc">From everyday clothes to statement accessories — virtually try every product category with AI precision.</p>
+
+    <div class="categories-grid">
+      <div class="category-chip fade-in active">
+        <span class="cat-emoji">👕</span>
+        <div class="cat-label">T-Shirts & Tops</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">👔</span>
+        <div class="cat-label">Shirts</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">👗</span>
+        <div class="cat-label">Dresses</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">🧥</span>
+        <div class="cat-label">Jackets & Coats</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">👖</span>
+        <div class="cat-label">Pants & Trousers</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">👟</span>
+        <div class="cat-label">Shoes & Footwear</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">💎</span>
+        <div class="cat-label">Jewellery</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">📿</span>
+        <div class="cat-label">Necklaces</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">👜</span>
+        <div class="cat-label">Accessories</div>
+      </div>
+      <div class="category-chip fade-in">
+        <span class="cat-emoji">➕</span>
+        <div class="cat-label">More Coming...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture" class="arch-section">
+    <div class="section-label">🏗️ Technical Architecture</div>
+    <h2 class="section-title">Built for <span class="text-gradient">Scale</span></h2>
+    <p class="section-desc">A clean, modular architecture that separates concerns and enables easy expansion.</p>
+
+    <div class="arch-diagram fade-in">
+      <!-- Layer 1: User -->
+      <div class="arch-row">
+        <div class="arch-node">
+          <span class="arch-node-icon">👤</span>
+          <div class="arch-node-label">User</div>
+        </div>
+      </div>
+
+      <div class="arch-row"><span class="arch-arrow">↕</span></div>
+
+      <!-- Layer 2: Extension -->
+      <div class="arch-row">
+        <div class="arch-node" style="border-color:rgba(124,58,237,0.4)">
+          <span class="arch-node-icon">🧩</span>
+          <div class="arch-node-label">Popup UI</div>
+        </div>
+        <span class="arch-arrow">↔</span>
+        <div class="arch-node" style="border-color:rgba(124,58,237,0.4)">
+          <span class="arch-node-icon">📄</span>
+          <div class="arch-node-label">Content Script</div>
+        </div>
+        <span class="arch-arrow">↔</span>
+        <div class="arch-node" style="border-color:rgba(124,58,237,0.4)">
+          <span class="arch-node-icon">⚙️</span>
+          <div class="arch-node-label">Background SW</div>
+        </div>
+      </div>
+
+      <div class="arch-row">
+        <div class="arch-node" style="min-width:80px">
+          <span class="arch-node-icon" style="font-size:18px">💾</span>
+          <div class="arch-node-label">Chrome Storage</div>
+        </div>
+        <span class="arch-arrow">↔</span>
+        <div class="arch-node" style="min-width:80px;border-color:rgba(236,72,153,0.4)">
+          <span class="arch-node-icon" style="font-size:18px">🌐</span>
+          <div class="arch-node-label">Shopping Website</div>
+        </div>
+      </div>
+
+      <div class="arch-row"><span class="arch-arrow">↕</span></div>
+
+      <!-- Layer 3: Backend -->
+      <div class="arch-row">
+        <div class="arch-node" style="border-color:rgba(16,185,129,0.4)">
+          <span class="arch-node-icon">☁️</span>
+          <div class="arch-node-label">Vercel API</div>
+        </div>
+        <span class="arch-arrow">↔</span>
+        <div class="arch-node" style="border-color:rgba(16,185,129,0.4)">
+          <span class="arch-node-icon">🤖</span>
+          <div class="arch-node-label">Gemini AI</div>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.06)">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:12px;">
+          <div>
+            <div style="font-weight:700;color:var(--accent-light);margin-bottom:6px;">🧩 Chrome Extension</div>
+            <ul style="list-style:none;color:var(--text2);display:flex;flex-direction:column;gap:4px;">
+              <li>• Manifest V3</li>
+              <li>• Content Script product detection</li>
+              <li>• Chrome Storage for profile</li>
+              <li>• Service Worker messaging</li>
+            </ul>
+          </div>
+          <div>
+            <div style="font-weight:700;color:var(--accent-light);margin-bottom:6px;">☁️ Vercel Backend</div>
+            <ul style="list-style:none;color:var(--text2);display:flex;flex-direction:column;gap:4px;">
+              <li>• Serverless Node.js functions</li>
+              <li>• Secure API key management</li>
+              <li>• CORS enabled for extension</li>
+              <li>• Edge-deployed globally</li>
+            </ul>
+          </div>
+          <div>
+            <div style="font-weight:700;color:var(--accent-light);margin-bottom:6px;">🤖 AI Generation</div>
+            <ul style="list-style:none;color:var(--text2);display:flex;flex-direction:column;gap:4px;">
+              <li>• Gemini 2.0 Flash multimodal</li>
+              <li>• Category-specific prompts</li>
+              <li>• User photo + product image</li>
+              <li>• Context-aware backgrounds</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation Guide -->
+  <section id="install" style="background:var(--bg2)">
+    <div class="section-label">🚀 Get Started</div>
+    <h2 class="section-title">Install & <span class="text-gradient">Start Shopping</span></h2>
+    <p class="section-desc">Follow these steps to get the TryOn AI Chrome Extension running locally.</p>
+
+    <div class="install-steps">
+      <div class="install-step fade-in">
+        <div class="install-step-num">1</div>
+        <div class="install-step-content">
+          <h4>Deploy the Backend to Vercel</h4>
+          <p>Navigate to the <code>backend/</code> folder. Set up a Vercel project, add your <code>GEMINI_API_KEY</code> as an environment variable, and deploy. Copy your deployment URL (e.g., <code>https://your-project.vercel.app</code>).</p>
+        </div>
+      </div>
+
+      <div class="install-step fade-in">
+        <div class="install-step-num">2</div>
+        <div class="install-step-content">
+          <h4>Update Backend URL in Extension</h4>
+          <p>Open <code>extension/popup.js</code> and update the <code>BACKEND_URL</code> constant at the top with your Vercel deployment URL.</p>
+        </div>
+      </div>
+
+      <div class="install-step fade-in">
+        <div class="install-step-num">3</div>
+        <div class="install-step-content">
+          <h4>Load Extension in Chrome</h4>
+          <p>Open Chrome and navigate to <code>chrome://extensions</code>. Enable "Developer Mode" (top right toggle). Click "Load Unpacked" and select the <code>extension/</code> folder from this project.</p>
+        </div>
+      </div>
+
+      <div class="install-step fade-in">
+        <div class="install-step-num">4</div>
+        <div class="install-step-content">
+          <h4>Set Up Your Digital Profile</h4>
+          <p>Click the TryOn AI extension icon (pin it first if needed). Click the 👤 profile icon and upload your photos. At minimum, upload a full-body or upper-body photo to get started.</p>
+        </div>
+      </div>
+
+      <div class="install-step fade-in">
+        <div class="install-step-num">5</div>
+        <div class="install-step-content">
+          <h4>Browse & Try On!</h4>
+          <p>Navigate to any shopping website (Amazon, Flipkart, Myntra, etc.). Open the extension, click Scan, select a product, and hit "Try On"! The AI will generate your personalized try-on result.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <div class="cta-card">
+      <h2>Ready to Try On Everything?</h2>
+      <p>Your AI-powered virtual fitting room is just one click away. No more returns, no more guessing.</p>
+      <div class="cta-actions">
+        <a href="#install" class="btn-white">
+          🧩 Install Extension
+        </a>
+        <a href="USER_GUIDE.md" class="btn-outline-white">
+          📖 Read User Guide
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-brand">
+        <a href="#" class="nav-logo" style="margin-bottom:0">
+          <div class="nav-logo-icon">✨</div>
+          <span class="nav-logo-text">TryOn AI</span>
+        </a>
+        <p>AI-powered virtual try-on Chrome extension. Try clothes, shoes, and accessories from any online store using your personal digital profile.</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#categories">Categories</a></li>
+          <li><a href="#install">Install</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Technology</h4>
+        <ul>
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="https://ai.google.dev" target="_blank">Gemini AI</a></li>
+          <li><a href="https://vercel.com" target="_blank">Vercel</a></li>
+          <li><a href="https://developer.chrome.com/docs/extensions/mv3" target="_blank">Chrome MV3</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="USER_GUIDE.md">User Guide</a></li>
+          <li><a href="backend/">Backend Docs</a></li>
+          <li><a href="extension/">Extension Code</a></li>
+          <li><a href="#install">Setup Guide</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>© 2026 TryOn AI • AI Virtual Try-On Chrome Extension Assignment</span>
+      <span>Built with ✨ Google Gemini AI</span>
+    </div>
+  </footer>
+
+  <script>
+    // Intersection observer for fade-in animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+    // Category chip interaction
+    document.querySelectorAll('.category-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+    });
+
+    // Navbar scroll effect
+    window.addEventListener('scroll', () => {
+      const nav = document.getElementById('navbar');
+      if (window.scrollY > 50) {
+        nav.style.background = 'rgba(8, 8, 16, 0.95)';
+        nav.style.borderBottomColor = 'rgba(255,255,255,0.08)';
+      } else {
+        nav.style.background = 'rgba(8, 8, 16, 0.8)';
+      }
+    });
+
+    // Smooth counter animation for stats
+    function animateCounter(el, target, suffix = '') {
+      let start = 0;
+      const duration = 1500;
+      const step = (timestamp) => {
+        if (!start) start = timestamp;
+        const progress = Math.min((timestamp - start) / duration, 1);
+        const current = Math.floor(progress * target);
+        el.textContent = current + suffix;
+        if (progress < 1) requestAnimationFrame(step);
+        else el.textContent = target + suffix;
+      };
+      requestAnimationFrame(step);
+    }
+  </script>
+</body>
+</html>
