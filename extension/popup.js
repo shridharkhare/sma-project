@@ -1,6 +1,6 @@
 // popup.js - Main popup logic for AI Virtual Try-On Chrome Extension
 
-const BACKEND_URL = 'https://ai-virtual-tryon-backend.vercel.app'; // Update after deploying backend
+const BACKEND_URL = 'https://sma-project-backend.vercel.app';
 
 // ========================
 // State Management
@@ -55,6 +55,38 @@ function formatDate(ts) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Resize an image File to maxWidth px before storing as base64
+// This keeps storage usage low (Chrome local storage has a ~5MB quota per extension)
+function resizeImageFile(file, maxWidth = 800) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxWidth / img.width);
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch (err) {
+          // Fallback: return original if canvas fails
+          resolve(ev.target.result);
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+
 // ========================
 // Profile Management
 // ========================
@@ -68,8 +100,15 @@ async function loadProfile() {
 }
 
 async function saveProfile() {
-  return new Promise(resolve => {
-    chrome.storage.local.set({ profile: state.profile }, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ profile: state.profile }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage error:', chrome.runtime.lastError);
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
@@ -685,42 +724,62 @@ function initEventListeners() {
   const photoTypes = ['fullbody', 'upperbody', 'face', 'feet', 'neck'];
   photoTypes.forEach(type => {
     const fileInput = $(`file-${type}`);
-    if (!fileInput) return;
+    if (!fileInput) {
+      console.warn(`File input not found for type: ${type}`);
+      return;
+    }
 
     fileInput.addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;
+      console.log(`Photo selected for ${type}:`, file.name, file.size);
 
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+      // Resize image before storing (to avoid Chrome storage quota errors)
+      resizeImageFile(file, 800).then(dataUrl => {
         const preview = $(`preview-${type}`);
         const placeholder = document.querySelector(`#upload-${type} .photo-placeholder`);
-        const uploadArea = $(`upload-${type}`);
+        const card = fileInput.closest('.photo-card');
 
-        preview.src = ev.target.result;
-        preview.classList.remove('hidden');
-        placeholder.classList.add('hidden');
-        uploadArea.closest('.photo-card').classList.add('has-uploaded');
+        if (preview) {
+          preview.src = dataUrl;
+          preview.classList.remove('hidden');
+        }
+        if (placeholder) placeholder.classList.add('hidden');
+        if (card) card.classList.add('has-uploaded');
 
         if (!state.profile) state.profile = { name: '', photos: {} };
         if (!state.profile.photos) state.profile.photos = {};
-        state.profile.photos[type] = ev.target.result;
-      };
-      reader.readAsDataURL(file);
+        state.profile.photos[type] = dataUrl;
+        showToast(`${type === 'fullbody' ? 'Full Body' : type === 'upperbody' ? 'Upper Body' : type.charAt(0).toUpperCase() + type.slice(1)} photo added ✓`, 'success', 1500);
+      }).catch(err => {
+        console.error('Image resize error:', err);
+        showToast('Failed to load image. Try a smaller file.', 'error');
+      });
     });
   });
 
   // Save Profile
   $('saveProfileBtn').addEventListener('click', async () => {
     const name = $('profileNameInput').value.trim() || 'My Profile';
-    if (!state.profile) state.profile = {};
+    if (!state.profile) state.profile = { photos: {} };
+    if (!state.profile.photos) state.profile.photos = {};
     state.profile.name = name;
     state.profile.updatedAt = Date.now();
 
-    await saveProfile();
-    updateProfileBanner();
-    showToast('Profile saved! ✓', 'success');
-    switchView('mainView');
+    const hasPhotos = Object.keys(state.profile.photos).length > 0;
+    if (!hasPhotos) {
+      showToast('Please upload at least one photo before saving', 'warning');
+      return;
+    }
+
+    try {
+      await saveProfile();
+      updateProfileBanner();
+      showToast('Profile saved! ✓', 'success');
+      switchView('mainView');
+    } catch (err) {
+      showToast(`Save failed: ${err.message}. Try smaller images.`, 'error', 5000);
+    }
   });
 
   // Delete Profile

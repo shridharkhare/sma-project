@@ -4,8 +4,9 @@
   "description": "Backend for AI Virtual Try-On Chrome Extension",
   "main": "api/index.js",
   "scripts": {
-    "dev": "npx vercel dev",
-    "start": "npx vercel dev"
+    "dev": "node server.js",
+    "start": "node server.js",
+    "dev:vercel": "npx -y vercel dev"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0"

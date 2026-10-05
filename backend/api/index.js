@@ -4,17 +4,20 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json'
 };
 
 module.exports = async function handler(req, res) {
-  Object.entries(CORS_HEADERS).forEach(([key, val]) => res.setHeader(key, val));
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
+  res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).json({ ok: true });
+    res.statusCode = 200;
+    res.end(JSON.stringify({ ok: true }));
+    return;
   }
 
-  return res.status(200).json({
+  res.statusCode = 200;
+  res.end(JSON.stringify({
     name: 'AI Virtual Try-On Backend',
     version: '1.0.0',
     status: 'healthy',
@@ -24,5 +27,5 @@ module.exports = async function handler(req, res) {
       'GET /api/health': 'Health check'
     },
     timestamp: new Date().toISOString()
-  });
+  }));
 };

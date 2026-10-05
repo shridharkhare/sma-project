@@ -7,36 +7,47 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Content-Type': 'application/json'
 };
 
 module.exports = async function handler(req, res) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).set(CORS_HEADERS).json({ ok: true });
+    Object.entries(CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
+    res.statusCode = 200;
+    res.end(JSON.stringify({ ok: true }));
+    return;
   }
 
-  // Set CORS headers for all responses
-  Object.entries(CORS_HEADERS).forEach(([key, val]) => res.setHeader(key, val));
+  // Set CORS + JSON headers for all responses
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
+  res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.statusCode = 405;
+    res.end(JSON.stringify({ error: 'Method not allowed' }));
+    return;
   }
 
   const { productImage, productTitle, category, userPhotos, profileName } = req.body || {};
 
   // Validation
   if (!productTitle && !productImage) {
-    return res.status(400).json({ error: 'Product information is required' });
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: 'Product information is required' }));
+    return;
   }
 
   if (!userPhotos || Object.keys(userPhotos).length === 0) {
-    return res.status(400).json({ error: 'User profile photos are required' });
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: 'User profile photos are required' }));
+    return;
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'AI service not configured' });
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: 'AI service not configured. Set GEMINI_API_KEY.' }));
+    return;
   }
 
   try {
@@ -49,101 +60,101 @@ module.exports = async function handler(req, res) {
       apiKey
     });
 
-    return res.status(200).json(result);
+    res.statusCode = 200;
+    res.end(JSON.stringify(result));
   } catch (error) {
     console.error('Try-on generation error:', error);
-    return res.status(500).json({
+    res.statusCode = 500;
+    res.end(JSON.stringify({
       error: error.message || 'Failed to generate try-on',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+      details: error.stack
+    }));
   }
 };
 
 async function generateTryOn({ productImage, productTitle, category, userPhotos, profileName, apiKey }) {
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Use Gemini 2.0 Flash for multimodal generation
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-
-  // Build the prompt based on category
+  // Category-specific prompts
   const categoryPrompts = {
-    tshirt: `Create a photorealistic virtual try-on image showing a person wearing the t-shirt/top from the product image. The person's face and body features should be maintained from the reference photo. The clothing should fit naturally and realistically on the person's body with proper draping, folds, and lighting. Show the complete upper body with the garment clearly visible.`,
-    shirt: `Generate a photorealistic image of a person wearing the shirt from the product image. Maintain the person's identity from the reference photo. The shirt should be properly fitted with realistic fabric texture, buttons, and collar. Show the upper body in a professional, natural pose.`,
-    dress: `Create a photorealistic virtual try-on showing the full dress from the product image worn by the person in the reference photo. Maintain the person's face and body. The dress should flow naturally with correct proportions and the environment should complement the dress style (e.g., floral dress in garden, evening gown in elegant setting).`,
-    jacket: `Generate a realistic try-on image of the person wearing the jacket/coat from the product image. Maintain the person's identity. Show proper layering if needed, with realistic fabric texture and fit. The background should complement the jacket style.`,
-    pants: `Create a photorealistic full-body try-on showing the pants/trousers from the product image on the person. Show the complete lower body with appropriate footwear. Maintain the person's appearance with natural pose.`,
-    shoes: `Generate a realistic close-up try-on showing the shoes from the product image on the person's feet. Show the shoes from a natural perspective (slightly above or at eye level) on the person's feet. Maintain natural foot positioning and appropriate background.`,
-    jewellery: `Create a photorealistic image showing the jewellery/necklace from the product image worn by the person. Focus on the neck area, showing the piece of jewellery clearly against the person's skin/outfit. Proper lighting to highlight the jewellery's details and materials.`,
-    accessory: `Generate a realistic image showing the accessory from the product image used/worn by the person. Position the accessory appropriately (handbag carried, watch on wrist, sunglasses on face, etc.) with natural positioning and lighting.`,
-    auto: `Create a photorealistic virtual try-on image showing the product from the product image worn/used by the person from the reference photo. Position the product naturally on the appropriate body part with realistic lighting, shadows, and proportions.`
+    tshirt: `Create a photorealistic virtual try-on image showing a person wearing this exact t-shirt/top. The person's face and body features from the reference photo must be preserved. The clothing should fit naturally with realistic draping, folds, and lighting. Show complete upper body.`,
+    shirt: `Create a photorealistic image of the person from the reference photo wearing this exact shirt. Maintain their identity. The shirt should be properly fitted with realistic fabric texture. Show upper body in a natural pose.`,
+    dress: `Create a photorealistic virtual try-on showing this exact dress worn by the person from the reference photo. Maintain their face and body. The dress should flow naturally with correct proportions. Choose a background that complements the dress style.`,
+    jacket: `Create a realistic try-on of the person from the reference photo wearing this exact jacket/coat. Maintain their identity with realistic fabric texture and fit. Choose a complementary background.`,
+    pants: `Create a photorealistic full-body try-on showing these exact pants/trousers on the person from the reference photo. Show complete lower body with appropriate footwear. Maintain their appearance with natural pose.`,
+    shoes: `Create a realistic try-on showing these exact shoes on the person's feet from the reference photo. Show from a natural perspective angle. Maintain natural foot positioning.`,
+    jewellery: `Create a photorealistic image showing this exact jewellery/necklace worn by the person from the reference photo. Focus on the neck/décolletage area. Use proper lighting to highlight the jewellery's details.`,
+    accessory: `Create a realistic image showing this exact accessory worn/used by the person from the reference photo. Position it appropriately (handbag carried, watch on wrist, sunglasses on face) with natural positioning.`,
+    auto: `Create a photorealistic virtual try-on image showing this product worn/used by the person from the reference photo. Position it naturally on the appropriate body part with realistic lighting and proportions.`
   };
 
   const basePrompt = categoryPrompts[category] || categoryPrompts.auto;
 
   const prompt = `${basePrompt}
 
-IMPORTANT REQUIREMENTS:
-1. The person's face, skin tone, body shape, and identity must be preserved from the reference user photo
-2. The product's colors, patterns, logos, and distinctive features must be accurately reproduced
-3. Use realistic lighting and shadows that match the scene
-4. The overall image should look like a professional fashion photograph
-5. Do NOT just paste the product image over the person - generate a naturally integrated, realistic result
-6. Product title for reference: "${productTitle || 'Fashion product'}"
-${productImage ? '7. Use the product image as the exact product to try on' : ''}
+CRITICAL REQUIREMENTS:
+1. PRESERVE the person's face, skin tone, body shape, and overall identity from the reference user photo exactly
+2. ACCURATELY reproduce the product's colors, patterns, logos, and distinctive features 
+3. Use realistic lighting and shadows that match the environment
+4. Result should look like a professional fashion/editorial photograph - NOT a composited image
+5. The product title for context: "${productTitle || 'Fashion product'}"
+6. Do NOT generate a generic similar product - use the EXACT product shown
 
-Generate a high-quality, photorealistic fashion try-on image.`;
+Generate ONE high-quality photorealistic fashion try-on image.`;
 
-  // Prepare image parts
+  // Build parts array — user photo first, then product image
   const parts = [{ text: prompt }];
 
-  // Add user photo
-  const primaryPhoto = userPhotos.fullbody || userPhotos.upperbody || userPhotos.face || userPhotos.feet || userPhotos.neck;
+  // Add user photo (primary reference)
+  const primaryPhoto = userPhotos.upperbody || userPhotos.fullbody || userPhotos.face || userPhotos.feet || userPhotos.neck;
   if (primaryPhoto) {
-    const userImageData = extractBase64(primaryPhoto);
-    if (userImageData) {
-      parts.push({
-        inlineData: {
-          mimeType: userImageData.mimeType,
-          data: userImageData.data
-        }
-      });
+    const userData = extractBase64(primaryPhoto);
+    if (userData) {
+      parts.push({ inlineData: { mimeType: userData.mimeType, data: userData.data } });
     }
   }
 
-  // Add product image if available (as URL reference in prompt since direct image passing may need base64)
-  if (productImage && isBase64(productImage)) {
-    const productImageData = extractBase64(productImage);
-    if (productImageData) {
-      parts.push({
-        inlineData: {
-          mimeType: productImageData.mimeType,
-          data: productImageData.data
-        }
-      });
+  // Add product image if it's a base64 data URL
+  if (productImage && productImage.startsWith('data:')) {
+    const productData = extractBase64(productImage);
+    if (productData) {
+      parts.push({ inlineData: { mimeType: productData.mimeType, data: productData.data } });
     }
-  } else if (productImage) {
-    // Reference the product image URL in the prompt
-    parts[0].text += `\n\nProduct image URL for reference: ${productImage}`;
+  } else if (productImage && productImage.startsWith('http')) {
+    // Fetch the product image and convert to base64
+    try {
+      const fetchedData = await fetchImageAsBase64(productImage);
+      if (fetchedData) {
+        parts.push({ inlineData: { mimeType: fetchedData.mimeType, data: fetchedData.data } });
+      }
+    } catch (e) {
+      // If fetch fails, just reference in prompt
+      parts[0].text += `\n\nProduct image URL (use this as visual reference for the exact product): ${productImage}`;
+    }
   }
+
+  // Use gemini-2.0-flash-preview-image-generation for image output
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash-preview-image-generation',
+  });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts }],
     generationConfig: {
-      responseModalities: ['image', 'text'],
+      responseModalities: ['IMAGE', 'TEXT'],
       temperature: 0.7,
     }
   });
 
   const response = result.response;
-  
-  // Extract generated image
+
+  // Extract generated image from response
   let generatedImageUrl = null;
   let generatedText = '';
 
   for (const candidate of response.candidates || []) {
     for (const part of candidate.content?.parts || []) {
       if (part.inlineData?.mimeType?.startsWith('image/')) {
-        // Convert base64 image to data URL
         generatedImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
       if (part.text) {
@@ -153,8 +164,11 @@ Generate a high-quality, photorealistic fashion try-on image.`;
   }
 
   if (!generatedImageUrl) {
-    // Fallback: Try with imagen or use text response
-    throw new Error('No image was generated. Please try again or check the product image.');
+    const finishReason = response.candidates?.[0]?.finishReason;
+    throw new Error(
+      `No image generated. Finish reason: ${finishReason || 'unknown'}. ` +
+      `This may be due to safety filters or an unsupported request. Try a different product image.`
+    );
   }
 
   return {
@@ -168,11 +182,29 @@ Generate a high-quality, photorealistic fashion try-on image.`;
 
 function extractBase64(dataUrl) {
   if (!dataUrl) return null;
-  const match = dataUrl.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+  const match = dataUrl.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9\-\.+]+);base64,(.+)$/);
   if (!match) return null;
   return { mimeType: match[1], data: match[2] };
 }
 
-function isBase64(str) {
-  return str && str.startsWith('data:');
+async function fetchImageAsBase64(url) {
+  // Use Node.js built-in fetch (Node 18+) or https module
+  const https = require('https');
+  const http = require('http');
+
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    client.get(url, { timeout: 8000 }, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const base64 = buffer.toString('base64');
+        const contentType = res.headers['content-type'] || 'image/jpeg';
+        const mimeType = contentType.split(';')[0].trim();
+        resolve({ mimeType, data: base64 });
+      });
+      res.on('error', reject);
+    }).on('error', reject).on('timeout', () => reject(new Error('Image fetch timeout')));
+  });
 }
